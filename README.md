@@ -11,12 +11,17 @@ By default:
 - output: .env.enc
 
 If running interactively, `envseal` prompts for a hidden password. For automation, you can still pass `--pass` or set `ENVSEAL_PASS`.
+When supplied via `--pass` or `ENVSEAL_PASS`, a matching pair of surrounding single or double quotes is normalized.
 
 ## Encrypt custom file
 npx @salimshamim/envseal --pass 'masterpass' --in .env.local --out .env.local.enc
 
 ## Decrypt
 npx @salimshamim/envseal --decrypt --pass 'masterpass' --in .env.enc --out .env
+
+By default in decrypt mode:
+- input: .env.enc
+- output: .env
 
 ## Overwrite output
 npx @salimshamim/envseal --pass 'masterpass' --force
@@ -47,9 +52,7 @@ npx @salimshamim/envseal --pass 'my!secret@1'
 ## Cross-Platform Passwords
 `--pass 'mypass'` means the same thing on Windows `cmd.exe`, PowerShell, and Linux/macOS bash.
 
-Windows `cmd.exe` does not strip surrounding quotes, so they used to become part of the password and encrypted files failed to decrypt on Linux. envseal now strips a matching pair of surrounding single or double quotes, so you can encrypt on one OS and decrypt on another with the exact same command.
-
-Files encrypted with older versions from `cmd.exe` still decrypt correctly.
+Windows `cmd.exe` does not strip surrounding quotes, so they used to become part of the password and encrypted files failed to decrypt on Linux. envseal now normalizes a matching pair of surrounding single or double quotes, so you can encrypt on one OS and decrypt on another with the exact same command.
 
 ## Test
 npm test
@@ -57,7 +60,14 @@ npm test
 ## Coverage
 npm run coverage
 
+`npm run coverage` runs tests and enforces coverage thresholds.
+
 ## Contribution Guide
+
+### Issue first or direct PR?
+- Direct PRs are welcome for small, clear changes (typos, docs, tests, minor refactors, or narrowly scoped bug fixes).
+- Please open an issue first for larger changes (new features, breaking changes, behavior changes, security-sensitive updates, or anything that needs design discussion).
+- When in doubt, open an issue so scope and approach can be agreed before implementation.
 
 ### Local setup
 ```bash
@@ -65,6 +75,10 @@ npm install
 npm test
 npm run coverage
 ```
+
+### Pre-push checks
+The repository uses Husky to run `npm run coverage` on push to `origin`.
+If tests or coverage thresholds fail, the push is blocked.
 
 ### Manual CLI test sequence
 1. Create a sample env file:
