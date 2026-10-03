@@ -3,7 +3,7 @@ import { Command } from "commander";
 import { readFile, writeFile, access } from "node:fs/promises";
 import crypto from "node:crypto";
 import path from "node:path";
-import readline from "node:readline";
+import { promptHidden, resolvePassword } from "./password.js";
 
 const program = new Command();
 
@@ -85,14 +85,6 @@ function decryptObject(payload, password) {
   return plain.toString("utf8");
 }
 
-// cmd.exe keeps surrounding quotes in argv while bash/PowerShell strip them, so strip them here to keep passwords identical across shells.
-function normalizePassword(raw) {
-  const wrapped =
-    raw.length > 1 &&
-    ((raw.startsWith("'") && raw.endsWith("'")) || (raw.startsWith('"') && raw.endsWith('"')));
-  return wrapped ? raw.slice(1, -1) : raw;
-}
-
 async function fileExists(path) {
   try {
     await access(path);
@@ -100,54 +92,6 @@ async function fileExists(path) {
   } catch {
     return false;
   }
-}
-
-function promptHidden(query) {
-  return new Promise((resolve) => {
-    const rl = readline.createInterface({
-      input: process.stdin,
-      output: process.stdout,
-      terminal: true
-    });
-
-    rl.question(query, { hideEchoBack: true }, (answer) => {
-      rl.close();
-      console.log();
-      resolve(answer);
-    });
-  });
-}
-
-async function resolvePassword(cliPassword, decryptMode) {
-  if (cliPassword) {
-    return normalizePassword(cliPassword);
-  }
-
-  if (process.env.ENVSEAL_PASS) {
-    return normalizePassword(process.env.ENVSEAL_PASS);
-  }
-
-  if (!process.stdin.isTTY || !process.stdout.isTTY) {
-    throw new Error("Password is required. Provide --pass, set ENVSEAL_PASS, or run in an interactive terminal.");
-  }
-
-  const password = await promptHidden("Enter password: ");
-
-  if (!password) {
-    throw new Error("Password cannot be empty.");
-  }
-
-  if (decryptMode) {
-    return password;
-  }
-
-  const confirmation = await promptHidden("Confirm password: ");
-
-  if (password !== confirmation) {
-    throw new Error("Passwords did not match.");
-  }
-
-  return password;
 }
 
 program
@@ -172,7 +116,13 @@ const outputPath = opts.out || (decryptMode ? ".env" : ".env.enc");
 let password;
 
 try {
-  password = await resolvePassword(opts.pass, decryptMode);
+  password = await resolvePassword({
+    cliPassword: opts.pass,
+    envPassword: process.env.ENVSEAL_PASS,
+    decryptMode,
+    isInteractive: Boolean(process.stdin.isTTY && process.stdout.isTTY),
+    promptHidden
+  });
 } catch (err) {
   console.error(`Error: ${err.message}`);
   process.exit(1);

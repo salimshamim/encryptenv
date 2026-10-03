@@ -3,6 +3,7 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
+import { normalizePassword, promptHidden, resolvePassword } from "../bin/password.js";
 
 const cliPath = path.resolve("bin", "cli.js");
 
@@ -193,5 +194,161 @@ describe("encryptenv cli", function () {
       assert.notEqual(result.status, 0);
       assert.match(result.stderr, /Input and output paths must be different/);
     });
+  });
+
+  it("fails when output already exists without --force", async function () {
+    await withTempDir(async (cwd) => {
+      await writeFile(path.join(cwd, ".env"), "A=1\n", "utf8");
+      await writeFile(path.join(cwd, ".env.enc"), "already-there\n", "utf8");
+
+      const result = runCli(["--pass", TEST_PASS], cwd);
+
+      assert.notEqual(result.status, 0);
+      assert.match(result.stderr, /Output file already exists/);
+      assert.match(result.stderr, /--force/);
+    });
+  });
+
+  it("fails with clear message when decrypt input is not encrypted JSON", async function () {
+    await withTempDir(async (cwd) => {
+      await writeFile(path.join(cwd, ".env.bad"), "NOT_JSON", "utf8");
+
+      const result = runCli(
+        ["--decrypt", "--pass", TEST_PASS, "--in", ".env.bad", "--out", ".env.dec"],
+        cwd
+      );
+
+      assert.notEqual(result.status, 0);
+      assert.match(result.stderr, /Input file is not valid encrypted JSON/);
+      assert.match(result.stderr, /Did you mean --in \.env\.enc/);
+    });
+  });
+});
+
+describe("password helpers", function () {
+  it("normalizes matching surrounding single and double quotes", function () {
+    assert.equal(normalizePassword("'pass'"), "pass");
+    assert.equal(normalizePassword('"pass"'), "pass");
+    assert.equal(normalizePassword("pass"), "pass");
+  });
+
+  it("uses normalized cli password first", async function () {
+    const password = await resolvePassword({
+      cliPassword: "'abc'",
+      envPassword: "ignored",
+      decryptMode: false,
+      isInteractive: false,
+      promptHidden: async () => ""
+    });
+
+    assert.equal(password, "abc");
+  });
+
+  it("uses normalized env password when cli password is absent", async function () {
+    const password = await resolvePassword({
+      cliPassword: "",
+      envPassword: '"abc"',
+      decryptMode: false,
+      isInteractive: false,
+      promptHidden: async () => ""
+    });
+
+    assert.equal(password, "abc");
+  });
+
+  it("throws when non-interactive and password is missing", async function () {
+    await assert.rejects(
+      resolvePassword({
+        cliPassword: "",
+        envPassword: "",
+        decryptMode: false,
+        isInteractive: false,
+        promptHidden: async () => ""
+      }),
+      /Password is required/
+    );
+  });
+
+  it("throws when interactive password is empty", async function () {
+    await assert.rejects(
+      resolvePassword({
+        cliPassword: "",
+        envPassword: "",
+        decryptMode: false,
+        isInteractive: true,
+        promptHidden: async () => ""
+      }),
+      /Password cannot be empty/
+    );
+  });
+
+  it("returns prompted password directly in decrypt mode", async function () {
+    const calls = [];
+    const password = await resolvePassword({
+      cliPassword: "",
+      envPassword: "",
+      decryptMode: true,
+      isInteractive: true,
+      promptHidden: async (q) => {
+        calls.push(q);
+        return "abc";
+      }
+    });
+
+    assert.equal(password, "abc");
+    assert.deepEqual(calls, ["Enter password: "]);
+  });
+
+  it("throws when interactive confirmation does not match", async function () {
+    const answers = ["abc", "xyz"];
+    await assert.rejects(
+      resolvePassword({
+        cliPassword: "",
+        envPassword: "",
+        decryptMode: false,
+        isInteractive: true,
+        promptHidden: async () => answers.shift()
+      }),
+      /Passwords did not match/
+    );
+  });
+
+  it("returns interactive password when confirmation matches", async function () {
+    const answers = ["abc", "abc"];
+    const password = await resolvePassword({
+      cliPassword: "",
+      envPassword: "",
+      decryptMode: false,
+      isInteractive: true,
+      promptHidden: async () => answers.shift()
+    });
+
+    assert.equal(password, "abc");
+  });
+
+  it("promptHidden resolves answer and closes interface", async function () {
+    let closed = false;
+    let askedQuery = "";
+    let hideEchoBack = false;
+
+    const answer = await promptHidden("Enter password: ", {
+      input: {},
+      output: {},
+      createInterface: () => ({
+        question: (query, options, cb) => {
+          askedQuery = query;
+          hideEchoBack = Boolean(options?.hideEchoBack);
+          cb("typed-secret");
+        },
+        close: () => {
+          closed = true;
+        }
+      })
+    });
+
+    assert.equal(answer, "typed-secret");
+    assert.equal(askedQuery, "Enter password: ");
+    assert.equal(hideEchoBack, true);
+    assert.equal(closed, true);
   });
 });
