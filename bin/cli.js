@@ -154,7 +154,7 @@ program
   .name("envseal")
   .description("Encrypt/decrypt .env files for safe git transfer")
   .option("--pass <password>", "Master password (prefer interactive prompt for local use; wrap in single quotes '...' in bash to avoid '!' history expansion)")
-  .option("--in <path>", "Input file path", ".env")
+  .option("--in <path>", "Input file path")
   .option("--out <path>", "Output file path")
   .option("--decrypt", "Decrypt mode")
   .option("--force", "Overwrite output if it exists", false)
@@ -166,7 +166,7 @@ program
 
 const opts = program.opts();
 const decryptMode = Boolean(opts.decrypt);
-const inputPath = opts.in;
+const inputPath = opts.in || (decryptMode ? ".env.enc" : ".env");
 const outputPath = opts.out || (decryptMode ? ".env" : ".env.enc");
 
 let password;
