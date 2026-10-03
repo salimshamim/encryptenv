@@ -120,11 +120,11 @@ function promptHidden(query) {
 
 async function resolvePassword(cliPassword, decryptMode) {
   if (cliPassword) {
-    return cliPassword;
+    return normalizePassword(cliPassword);
   }
 
   if (process.env.ENVSEAL_PASS) {
-    return process.env.ENVSEAL_PASS;
+    return normalizePassword(process.env.ENVSEAL_PASS);
   }
 
   if (!process.stdin.isTTY || !process.stdout.isTTY) {
@@ -203,14 +203,7 @@ try {
       throw new Error(`Input file is not valid encrypted JSON. Did you mean --in .env.enc? (got: ${inputPath})`);
     }
 
-    let decrypted;
-    try {
-      decrypted = decryptObject(payload, password);
-    } catch (err) {
-      // Files encrypted before quote normalization kept the quotes in the password.
-      if (password === rawPassword) throw err;
-      decrypted = decryptObject(payload, rawPassword);
-    }
+    const decrypted = decryptObject(payload, password);
 
     await writeFile(outputPath, decrypted, "utf8");
     console.log(`Decrypted ${inputPath} -> ${outputPath}`);
