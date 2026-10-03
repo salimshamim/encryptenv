@@ -1,0 +1,8 @@
+#!/usr/bin/env sh
+
+# Only enforce on pushes to origin.
+if [ "$1" != "origin" ]; then
+  exit 0
+fi
+
+npm run coverage || exit 1

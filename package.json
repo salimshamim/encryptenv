@@ -9,7 +9,8 @@
   "type": "module",
   "scripts": {
     "test": "mocha \"test/**/*.test.js\"",
-    "coverage": "c8 --check-coverage npm test"
+    "coverage": "c8 --check-coverage npm test",
+    "prepare": "husky"
   },
   "c8": {
     "all": true,
@@ -40,6 +41,7 @@
   },
   "devDependencies": {
     "c8": "^10.1.3",
+    "husky": "^9.1.7",
     "mocha": "^10.8.2"
   },
   "dependencies": {
