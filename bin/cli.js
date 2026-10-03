@@ -2,6 +2,8 @@
 import { Command } from "commander";
 import { readFile, writeFile, access } from "node:fs/promises";
 import crypto from "node:crypto";
+import path from "node:path";
+import readline from "node:readline";
 
 const program = new Command();
 
@@ -100,11 +102,59 @@ async function fileExists(path) {
   }
 }
 
+function promptHidden(query) {
+  return new Promise((resolve) => {
+    const rl = readline.createInterface({
+      input: process.stdin,
+      output: process.stdout,
+      terminal: true
+    });
+
+    rl.question(query, { hideEchoBack: true }, (answer) => {
+      rl.close();
+      console.log();
+      resolve(answer);
+    });
+  });
+}
+
+async function resolvePassword(cliPassword, decryptMode) {
+  if (cliPassword) {
+    return cliPassword;
+  }
+
+  if (process.env.ENVSEAL_PASS) {
+    return process.env.ENVSEAL_PASS;
+  }
+
+  if (!process.stdin.isTTY || !process.stdout.isTTY) {
+    throw new Error("Password is required. Provide --pass, set ENVSEAL_PASS, or run in an interactive terminal.");
+  }
+
+  const password = await promptHidden("Enter password: ");
+
+  if (!password) {
+    throw new Error("Password cannot be empty.");
+  }
+
+  if (decryptMode) {
+    return password;
+  }
+
+  const confirmation = await promptHidden("Confirm password: ");
+
+  if (password !== confirmation) {
+    throw new Error("Passwords did not match.");
+  }
+
+  return password;
+}
+
 program
   .name("envseal")
   .description("Encrypt/decrypt .env files for safe git transfer")
-  .option("--pass <password>", "Master password (wrap in single quotes '...' in bash to avoid '!' history expansion)")
-  .option("--in <path>", "Input file path")
+  .option("--pass <password>", "Master password (prefer interactive prompt for local use; wrap in single quotes '...' in bash to avoid '!' history expansion)")
+  .option("--in <path>", "Input file path", ".env")
   .option("--out <path>", "Output file path")
   .option("--decrypt", "Decrypt mode")
   .option("--force", "Overwrite output if it exists", false)
@@ -115,18 +165,23 @@ program
   .parse(process.argv);
 
 const opts = program.opts();
-const rawPassword = opts.pass || process.env.ENVSEAL_PASS;
+const decryptMode = Boolean(opts.decrypt);
+const inputPath = opts.in;
+const outputPath = opts.out || (decryptMode ? ".env" : ".env.enc");
 
-if (!rawPassword) {
-  console.error("Error: --pass is required (use single quotes '...' in bash if password contains '!')");
+let password;
+
+try {
+  password = await resolvePassword(opts.pass, decryptMode);
+} catch (err) {
+  console.error(`Error: ${err.message}`);
   process.exit(1);
 }
 
-const password = normalizePassword(rawPassword);
-
-const decryptMode = Boolean(opts.decrypt);
-const inputPath = opts.in || (decryptMode ? ".env.enc" : ".env");
-const outputPath = opts.out || (decryptMode ? ".env" : ".env.enc");
+if (path.resolve(inputPath) === path.resolve(outputPath)) {
+  console.error("Error: Input and output paths must be different to avoid overwriting the source file.");
+  process.exit(1);
+}
 
 if (!opts.force && await fileExists(outputPath)) {
   console.error(`Error: Output file already exists: ${outputPath}. Use --force to overwrite.`);

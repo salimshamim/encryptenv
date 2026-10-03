@@ -149,12 +149,11 @@ describe("encryptenv cli", function () {
     });
   });
 
-  it("fails when password is missing and warns about single quotes", async function () {
+  it("fails when password is missing in non-interactive mode", async function () {
     await withTempDir(async (cwd) => {
       const result = runCli([], cwd, { ENVSEAL_PASS: "" });
       assert.notEqual(result.status, 0);
-      assert.match(result.stderr, /Error: --pass is required/);
-      assert.match(result.stderr, /single quotes/);
+      assert.match(result.stderr, /Error: Password is required/);
     });
   });
 
@@ -199,5 +198,20 @@ describe("encryptenv cli", function () {
     assert.equal(result.status, 0);
     assert.match(result.stdout, /Note on special characters in bash/);
     assert.match(result.stdout, /single quotes/);
+    assert.match(result.stdout, /prefer interactive prompt for local use/);
+  });
+
+  it("rejects identical input and output paths even with --force", async function () {
+    await withTempDir(async (cwd) => {
+      await writeFile(path.join(cwd, ".env.enc"), "{\n  \"v\": \"1\"\n}\n", "utf8");
+
+      const result = runCli(
+        ["--decrypt", "--pass", TEST_PASS, "--in", ".env.enc", "--out", ".env.enc", "--force"],
+        cwd
+      );
+
+      assert.notEqual(result.status, 0);
+      assert.match(result.stderr, /Input and output paths must be different/);
+    });
   });
 });

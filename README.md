@@ -1,12 +1,16 @@
 # envseal
-Locally Encrypt/Decrypt env files using password
+Locally encrypt/decrypt env files using a password.
+
+This is designed to protect `.env` contents from casual disclosure when sharing or committing encrypted files. The security boundary is the password: if the password is weak, reused, or exposed elsewhere, the encrypted file can still be brute-forced offline.
 
 ## Install / Run
-npx @salimshamim/envseal --pass 'masterpass'
+npx @salimshamim/envseal
 
 By default:
 - input: .env
 - output: .env.enc
+
+If running interactively, `envseal` prompts for a hidden password. For automation, you can still pass `--pass` or set `ENVSEAL_PASS`.
 
 ## Encrypt custom file
 npx @salimshamim/envseal --pass 'masterpass' --in .env.local --out .env.local.enc
@@ -17,6 +21,8 @@ npx @salimshamim/envseal --decrypt --pass 'masterpass' --in .env.enc --out .env
 ## Overwrite output
 npx @salimshamim/envseal --pass 'masterpass' --force
 
+`--force` allows replacing an existing output file, but input and output paths must still be different to avoid destroying the source file.
+
 ## Environment Variable
 You can also supply your password via `ENVSEAL_PASS`:
 ```bash
@@ -24,6 +30,12 @@ export ENVSEAL_PASS='masterpass'
 npx @salimshamim/envseal
 npx @salimshamim/envseal --decrypt --in .env.enc --out .env
 ```
+
+## Security Notes
+- The encrypted file intentionally stores metadata like algorithm, salt, IV, and authentication tag. Those values are not secrets.
+- The password is the secret. Use a strong, unique password with high entropy.
+- Anyone who obtains `.env.enc` can attempt offline password guessing; `scrypt` raises the cost but does not make weak passwords safe.
+- Prefer the interactive prompt or `ENVSEAL_PASS` for local use. Command-line arguments can be exposed via shell history or process inspection.
 
 ## Note on Special Characters in Bash (`!`)
 If your password contains `!`, always wrap it in **single quotes** (`'...'`) in bash/zsh:
@@ -62,7 +74,7 @@ printf "API_KEY=abc123\nMODE=dev\n" > .env
 
 2. Encrypt it:
 ```bash
-node bin/cli.js --pass 'localTest!123'
+node bin/cli.js
 ```
 
 3. Decrypt to a different file:
